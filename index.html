@@ -1,0 +1,86 @@
+
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Chat Lokal (Online + Nama Bebas)</title>
+  <style>
+    body { font-family: sans-serif; padding: 10px; background: #eef; }
+    .chat-box { max-width: 600px; margin: auto; background: white; padding: 10px; border-radius: 10px; }
+    .messages { height: 300px; overflow-y: scroll; border: 1px solid #ccc; padding: 5px; margin-bottom: 10px; }
+    .msg { margin: 5px 0; }
+    .msg.you { text-align: right; color: green; }
+    .msg.other { text-align: left; color: blue; }
+    input[type=text] { padding: 5px; }
+  </style>
+</head>
+<body>
+  <div class="chat-box">
+    <h2>Chat Lokal (Offline, Bisa Online Hosting)</h2>
+    <label>Nama Anda:</label>
+    <input type="text" id="username" placeholder="Tulis nama Anda..." value="User">
+
+    <div class="messages" id="chat"></div>
+
+    <input type="text" id="msgInput" placeholder="Tulis pesan..." style="width: 70%;">
+    <button onclick="sendMessage()">Kirim</button>
+  </div>
+
+  <script>
+    const dbName = "chatDB";
+    const storeName = "messages";
+
+    let db;
+    const request = indexedDB.open(dbName, 1);
+
+    request.onerror = () => alert("Gagal buka database");
+    request.onsuccess = (e) => {
+      db = e.target.result;
+      loadMessages();
+    };
+
+    request.onupgradeneeded = (e) => {
+      db = e.target.result;
+      db.createObjectStore(storeName, { autoIncrement: true });
+    };
+
+    function sendMessage() {
+      const user = document.getElementById("username").value.trim();
+      const msg = document.getElementById("msgInput").value.trim();
+      if (!msg || !user) return;
+
+      const tx = db.transaction([storeName], "readwrite");
+      const store = tx.objectStore(storeName);
+      const time = new Date().toLocaleString();
+      store.add({ user, msg, time });
+
+      tx.oncomplete = () => {
+        document.getElementById("msgInput").value = "";
+        loadMessages();
+      };
+    }
+
+    function loadMessages() {
+      const chat = document.getElementById("chat");
+      chat.innerHTML = "";
+      const tx = db.transaction([storeName], "readonly");
+      const store = tx.objectStore(storeName);
+      const req = store.openCursor();
+
+      req.onsuccess = (e) => {
+        const cursor = e.target.result;
+        if (cursor) {
+          const { user, msg, time } = cursor.value;
+          const currentUser = document.getElementById("username").value.trim();
+          const className = user === currentUser ? "msg you" : "msg other";
+          chat.innerHTML += `<div class="${className}"><strong>${user}</strong>: ${msg}<br><small>${time}</small></div>`;
+          cursor.continue();
+        }
+      };
+    }
+
+    document.getElementById("username").addEventListener("input", loadMessages);
+  </script>
+</body>
+</html>
