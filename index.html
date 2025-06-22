@@ -54,7 +54,7 @@
       const div = document.createElement("div");
 
       if (chat.audioBase64) {
-        const audio = new Audio("data:audio/webm;base64," + chat.audioBase64);
+        const audio = new Audio("data:audio/ogg;base64," + chat.audioBase64);
         const playBtn = document.createElement("button");
         playBtn.textContent = "▶️ Putar Suara";
         playBtn.onclick = () => audio.play();
