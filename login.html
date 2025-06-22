@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Masuk Chat</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      background: #1e1e1e;
+      color: white;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+    }
+    .login-box {
+      background: #2c2c2c;
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 0 10px #000;
+      width: 90%;
+      max-width: 400px;
+    }
+    input, button {
+      width: 100%;
+      padding: 10px;
+      margin-top: 10px;
+      font-size: 16px;
+      border-radius: 5px;
+      border: none;
+    }
+    input {
+      background: #444;
+      color: white;
+    }
+    button {
+      background: #007bff;
+      color: white;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #0056b3;
+    }
+  </style>
+</head>
+<body>
+  <div class="login-box">
+    <h2>Masuk ke Chat</h2>
+    <input type="text" id="username" placeholder="Nama Anda" />
+    <input type="text" id="room" placeholder="Nama Room" />
+    <button onclick="masuk()">Masuk</button>
+  </div>
+
+  <script>
+    function masuk() {
+      const user = document.getElementById("username").value.trim();
+      const room = document.getElementById("room").value.trim();
+      if (!user || !room) {
+        alert("Harap isi nama dan room.");
+        return;
+      }
+      localStorage.setItem("chatUser", user);
+      localStorage.setItem("chatRoom", room);
+      window.location.href = "index.html";
+    }
+  </script>
+</body>
+</html>
