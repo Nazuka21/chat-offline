@@ -1,0 +1,16 @@
+{
+  "name": "Chat Lokal",
+  "short_name": "Chat",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#2196f3",
+  "description": "Aplikasi Chat Offline yang Bisa Diakses Online",
+  "icons": [
+    {
+      "src": "icon.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    }
+  ]
+}
