@@ -54,10 +54,18 @@
       const div = document.createElement("div");
 
       if (chat.audioBase64) {
-        const audio = new Audio("data:audio/ogg;base64," + chat.audioBase64);
-        const playBtn = document.createElement("button");
-        playBtn.textContent = "▶️ Putar Suara";
-        playBtn.onclick = () => audio.play();
+        const audio = new Audio("data:audio/webm;base64," + chat.audioBase64);
+audio.onplay = () => console.log("Memutar suara...");
+audio.onerror = () => alert("❌ Gagal memutar suara. Coba browser lain atau rekam lebih lama.");
+const playBtn = document.createElement("button");
+playBtn.textContent = "▶️ Putar Suara";
+playBtn.onclick = () => {
+  audio.play().catch(err => {
+    console.error("Audio error:", err);
+    alert("Gagal memutar suara: " + err.message);
+  });
+};
+
         div.className = className;
         div.innerHTML = `<strong>${chat.user}</strong><br>`;
         div.appendChild(playBtn);
