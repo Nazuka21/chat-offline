@@ -2,105 +2,126 @@
 <html lang="id">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Chat + Voice + Video Call</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Chat + Voice (Tanpa Storage)</title>
   <style>
-    :root {
-      --bg: #f2f2f2;
-      --fg: #000;
-      --primary: #007bff;
-      --card: #fff;
-    }
-    [data-theme="dark"] {
-      --bg: #121212;
-      --fg: #f5f5f5;
-      --primary: #2196f3;
-      --card: #1e1e1e;
-    }
-    body {
-      font-family: sans-serif; margin: 0; background: var(--bg); color: var(--fg);
-    }
-    header {
-      background: var(--primary); color: white; padding: 10px; text-align: center;
-      display: flex; justify-content: space-between; align-items: center;
-    }
-    .chat-box { padding: 10px; max-width: 600px; margin: auto; }
-    #messages {
-      height: 400px; overflow-y: scroll; background: var(--card); padding: 10px;
-      border-radius: 8px; box-shadow: 0 0 4px #aaa; margin-bottom: 10px;
-    }
+    body { font-family: sans-serif; padding: 10px; background: #e3f2fd; }
+    .chat-box { max-width: 600px; margin: auto; background: white; padding: 10px; border-radius: 10px; }
+    .messages { height: 300px; overflow-y: scroll; border: 1px solid #ccc; padding: 5px; margin-bottom: 10px; }
     .msg { margin: 5px 0; }
     .msg.you { text-align: right; color: green; }
-    .msg.other { text-align: left; color: var(--fg); }
-    .bottom-bar {
-      position: sticky; bottom: 0; background: var(--card); padding: 10px;
-      border-top: 1px solid #ccc; display: flex; flex-wrap: wrap; gap: 5px;
-    }
-    input[type="text"] { flex: 1; padding: 8px; border-radius: 5px; border: 1px solid #ccc; }
-    button {
-      padding: 8px 10px; border: none; border-radius: 5px; cursor: pointer;
-      background: var(--primary); color: white;
-    }
-    button:hover { opacity: 0.9; }
-    audio { width: 100%; margin-top: 5px; }
-    #videoModal {
-      display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-      background: rgba(0,0,0,0.8); z-index: 1000; align-items: center; justify-content: center;
-    }
-    #videoModalContent {
-      background: #000; padding: 10px; border-radius: 10px; display: flex;
-      flex-direction: column; align-items: center;
-    }
-    video { width: 100%; max-width: 500px; margin: 5px 0; border-radius: 10px; }
-    .theme-toggle { background: none; border: none; color: white; font-size: 16px; cursor: pointer; }
+    .msg.other { text-align: left; color: blue; }
   </style>
-  <script>
-  const user = localStorage.getItem("chatUser");
-  const room = localStorage.getItem("chatRoom");
-  if (!user || !room) {
-    window.location.href = "login.html";  // Harus diarahkan ke login.html
-  }
-</script>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { getDatabase, ref, push, onChildAdded } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
+    const firebaseConfig = {
+      apiKey: "AIzaSyBD8-9mZJkOWrJqwyaJEgndw4_EHJ8YKxM",
+      authDomain: "chatyou-89cec.firebaseapp.com",
+      databaseURL: "https://chatyou-89cec-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "chatyou-89cec",
+      storageBucket: "chatyou-89cec.appspot.com",
+      messagingSenderId: "581474208654",
+      appId: "1:581474208654:web:924db50831230ca1acf2df"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+    const chatRef = ref(db, "messages");
+
+    const usernameInput = document.getElementById("username");
+    const msgInput = document.getElementById("msgInput");
+    const chatBox = document.getElementById("chat");
+
+    document.getElementById("sendBtn").onclick = () => {
+      const name = usernameInput.value.trim();
+      const msg = msgInput.value.trim();
+      if (!name || !msg) return;
+
+      push(chatRef, {
+        user: name,
+        msg: msg,
+        time: new Date().toLocaleString()
+      });
+      msgInput.value = "";
+    };
+
+    onChildAdded(chatRef, (data) => {
+      const chat = data.val();
+      const currentUser = usernameInput.value.trim();
+      const className = chat.user === currentUser ? "msg you" : "msg other";
+      const div = document.createElement("div");
+
+      if (chat.audioBase64) {
+        const audio = new Audio("data:audio/webm;base64," + chat.audioBase64);
+        const playBtn = document.createElement("button");
+        playBtn.textContent = "▶️ Putar Suara";
+        playBtn.onclick = () => audio.play();
+        div.className = className;
+        div.innerHTML = `<strong>${chat.user}</strong><br>`;
+        div.appendChild(playBtn);
+        div.innerHTML += `<br><small>${chat.time}</small>`;
+      } else {
+        div.className = className;
+        div.innerHTML = `<strong>${chat.user}</strong>: ${chat.msg}<br><small>${chat.time}</small>`;
+      }
+
+      chatBox.appendChild(div);
+      chatBox.scrollTop = chatBox.scrollHeight;
+    });
+
+    let mediaRecorder;
+    let audioChunks = [];
+
+    document.getElementById("recordBtn").onclick = async () => {
+      const name = usernameInput.value.trim();
+      if (!name) return alert("Masukkan nama dulu!");
+
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaRecorder = new MediaRecorder(stream);
+      audioChunks = [];
+
+      mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+      mediaRecorder.onstop = () => {
+        const blob = new Blob(audioChunks, { type: 'audio/webm' });
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const base64data = reader.result.split(',')[1];
+          push(chatRef, {
+            user: name,
+            time: new Date().toLocaleString(),
+            audioBase64: base64data
+          });
+        };
+        reader.readAsDataURL(blob);
+      };
+
+      mediaRecorder.start();
+      document.getElementById("recordBtn").disabled = true;
+      document.getElementById("stopBtn").disabled = false;
+    };
+
+    document.getElementById("stopBtn").onclick = () => {
+      mediaRecorder.stop();
+      document.getElementById("recordBtn").disabled = false;
+      document.getElementById("stopBtn").disabled = true;
+    };
+  </script>
 </head>
 <body>
-  <header>
-    <h2 id="roomTitle">Room: </h2>
-    <button class="theme-toggle" onclick="toggleTheme()">🌓</button>
-  </header>
   <div class="chat-box">
-    <div id="messages"></div>
-    <div class="bottom-bar">
-      <input type="text" id="textInput" placeholder="Tulis pesan..." />
-      <button onclick="sendText()">Kirim</button>
-      <button id="recBtn">🎤 Rekam</button>
-      <button id="stopBtn" disabled>⏹ Stop</button>
-      <button onclick="openVideoCall()">📹 Video Call</button>
-    </div>
+    <h2>Chat + Voice (Tanpa Storage)</h2>
+    <label>Nama Anda:</label>
+    <input type="text" id="username" placeholder="Tulis nama..." value="User" />
+
+    <div class="messages" id="chat"></div>
+
+    <input type="text" id="msgInput" placeholder="Tulis pesan..." style="width:65%;" />
+    <button id="sendBtn">Kirim</button>
+    <br><br>
+    <button id="recordBtn">🎙️ Rekam</button>
+    <button id="stopBtn" disabled>⏹️ Stop</button>
   </div>
-
-  <!-- Modal Video Call -->
-  <div id="videoModal">
-    <div id="videoModalContent">
-      <video id="localVideo" autoplay muted></video>
-      <video id="remoteVideo" autoplay></video>
-      <button onclick="closeVideoCall()">❌ Tutup</button>
-    </div>
-  </div>
-
-<script>
-// Theme toggle
-function toggleTheme() {
-  const html = document.documentElement;
-  const current = html.getAttribute('data-theme');
-  html.setAttribute('data-theme', current === 'dark' ? 'light' : 'dark');
-  localStorage.setItem('theme', html.getAttribute('data-theme'));
-}
-
-(function restoreTheme() {
-  const saved = localStorage.getItem('theme') || 'light';
-  document.documentElement.setAttribute('data-theme', saved);
-})();
-</script>
-
-<!-- Chat, Video Call, Firebase scripts seperti sebelumnya tetap disisipkan -->
+</body>
+</html>
