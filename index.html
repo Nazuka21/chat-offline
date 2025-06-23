@@ -1,24 +1,53 @@
-
 <!DOCTYPE html>
 <html lang="id">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Chat + Push-to-Talk</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chat + Voice + Video Call</title>
   <style>
-    body { font-family: sans-serif; padding: 10px; background: #e3f2fd; }
-    .chat-box { max-width: 600px; margin: auto; background: white; padding: 10px; border-radius: 10px; }
-    .messages { height: 300px; overflow-y: scroll; border: 1px solid #ccc; padding: 5px; margin-bottom: 10px; }
+    body { font-family: sans-serif; margin: 0; background: #f2f2f2; }
+    header { background: #007bff; color: white; padding: 10px; text-align: center; }
+    .chat-box { padding: 10px; max-width: 600px; margin: auto; }
+    #messages { height: 400px; overflow-y: auto; background: #fff; padding: 10px; border-radius: 8px; box-shadow: 0 0 4px #aaa; margin-bottom: 10px; }
     .msg { margin: 5px 0; }
     .msg.you { text-align: right; color: green; }
-    .msg.other { text-align: left; color: blue; }
+    .msg.other { text-align: left; color: black; }
+    input[type="text"] { width: 65%; padding: 8px; }
+    button { padding: 8px 10px; margin: 5px 2px; }
+    audio { width: 100%; margin-top: 5px; }
+    #videoOverlay {
+      display: none; position: fixed; top: 0; left: 0;
+      width: 100%; height: 100%; background: rgba(0,0,0,0.9);
+      justify-content: center; align-items: center; flex-direction: column; z-index: 9999;
+    }
+    video { width: 90vw; height: auto; max-height: 80vh; background: black; }
+    #closeVideo { margin-top: 10px; padding: 10px; background: red; color: white; border: none; }
   </style>
-  <script type="module">
-    import {{ initializeApp }} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-    import {{ getDatabase, ref, push, onChildAdded }} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-    import {{ getStorage, ref as sRef, uploadBytes, getDownloadURL }} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
+</head>
+<body>
+  <header>
+    <h2 id="roomTitle">Chat Lokal</h2>
+  </header>
+  <div class="chat-box">
+    <div id="messages"></div>
+    <div>
+      <input type="text" id="textInput" placeholder="Tulis pesan...">
+      <button onclick="sendText()">Kirim</button>
+      <button onclick="openVideoCall()">🎥 Video Call</button><br>
+      <button id="recBtn">🎤 Rekam</button>
+      <button id="stopBtn" disabled>⏹ Stop</button>
+    </div>
+  </div>
+  <div id="videoOverlay">
+    <video id="localVideo" autoplay muted></video>
+    <button id="closeVideo" onclick="closeVideoCall()">Tutup Video</button>
+  </div>
 
-    const firebaseConfig = {{
+  <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-database-compat.js"></script>
+
+  <script>
+    const firebaseConfig = {
       apiKey: "AIzaSyBD8-9mZJkOWrJqwyaJEgndw4_EHJ8YKxM",
       authDomain: "chatyou-89cec.firebaseapp.com",
       databaseURL: "https://chatyou-89cec-default-rtdb.asia-southeast1.firebasedatabase.app",
@@ -26,97 +55,82 @@
       storageBucket: "chatyou-89cec.appspot.com",
       messagingSenderId: "581474208654",
       appId: "1:581474208654:web:924db50831230ca1acf2df"
-    }};
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
 
-    const app = initializeApp(firebaseConfig);
-    const db = getDatabase(app);
-    const chatRef = ref(db, "messages");
-    const storage = getStorage(app);
+    let user = localStorage.getItem("chatUser") || prompt("Masukkan nama Anda:");
+    let room = localStorage.getItem("chatRoom") || prompt("Masukkan nama Room:");
+    localStorage.setItem("chatUser", user);
+    localStorage.setItem("chatRoom", room);
+    document.getElementById("roomTitle").textContent = "Room: #" + room;
 
-    const usernameInput = document.getElementById("username");
-    const msgInput = document.getElementById("msgInput");
-    const chatBox = document.getElementById("chat");
-
-    document.getElementById("sendBtn").onclick = () => {{
-      const name = usernameInput.value.trim();
-      const msg = msgInput.value.trim();
-      if (!name || !msg) return;
-
-      push(chatRef, {{
-        user: name,
-        msg: msg,
-        time: new Date().toLocaleString()
-      }});
-      msgInput.value = "";
-    }};
-
-    // Tampilkan pesan masuk
-    onChildAdded(chatRef, (data) => {{
-      const chat = data.val();
-      const currentUser = usernameInput.value.trim();
-      const className = chat.user === currentUser ? "msg you" : "msg other";
+    const messagesDiv = document.getElementById("messages");
+    firebase.database().ref("chats/" + room).on("child_added", snap => {
+      const msg = snap.val();
       const div = document.createElement("div");
-      if (chat.audioUrl) {{
-        div.className = className;
-        div.innerHTML = `<strong>{{chat.user}}</strong>: <audio controls src="{{chat.audioUrl}}"></audio><br><small>{{chat.time}}</small>`;
-      }} else {{
-        div.className = className;
-        div.innerHTML = `<strong>{{chat.user}}</strong>: {{chat.msg}}<br><small>{{chat.time}}</small>`;
-      }}
-      chatBox.appendChild(div);
-      chatBox.scrollTop = chatBox.scrollHeight;
-    }});
+      div.className = "msg " + (msg.user === user ? "you" : "other");
+      if (msg.voiceUrl) {
+        div.innerHTML = `<b>${msg.user}</b><br><audio controls src="${msg.voiceUrl}"></audio><br><small>${msg.time}</small>`;
+      } else {
+        div.innerHTML = `<b>${msg.user}</b>: ${msg.text}<br><small>${msg.time}</small>`;
+      }
+      messagesDiv.appendChild(div);
+      messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    });
 
-    // Rekam suara
-    let mediaRecorder;
-    let audioChunks = [];
+    function sendText() {
+      const text = document.getElementById("textInput").value.trim();
+      if (!text) return;
+      db.ref("chats/" + room).push({ user, text, time: new Date().toLocaleTimeString() });
+      document.getElementById("textInput").value = "";
+    }
 
-    document.getElementById("recordBtn").onclick = async () => {{
-      const name = usernameInput.value.trim();
-      if (!name) return alert("Masukkan nama dulu!");
+    let recorder, chunks = [];
+    const recBtn = document.getElementById("recBtn");
+    const stopBtn = document.getElementById("stopBtn");
 
-      const stream = await navigator.mediaDevices.getUserMedia({{ audio: true }});
-      mediaRecorder = new MediaRecorder(stream);
-      audioChunks = [];
+    recBtn.onclick = async () => {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      recorder = new MediaRecorder(stream);
+      chunks = [];
+      recorder.ondataavailable = e => chunks.push(e.data);
+      recorder.onstop = () => {
+        const blob = new Blob(chunks, { type: 'audio/webm' });
+        const url = URL.createObjectURL(blob);
+        db.ref("chats/" + room).push({ user, voiceUrl: url, time: new Date().toLocaleTimeString() });
+      };
+      recorder.start();
+      recBtn.disabled = true;
+      stopBtn.disabled = false;
+    };
 
-      mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
-      mediaRecorder.onstop = async () => {{
-        const blob = new Blob(audioChunks, {{ type: 'audio/webm' }});
-        const fileRef = sRef(storage, 'voices/' + Date.now() + '.webm');
-        await uploadBytes(fileRef, blob);
-        const url = await getDownloadURL(fileRef);
-        push(chatRef, {{
-          user: name,
-          time: new Date().toLocaleString(),
-          audioUrl: url
-        }});
-      }};
+    stopBtn.onclick = () => {
+      recorder.stop();
+      recBtn.disabled = false;
+      stopBtn.disabled = true;
+    };
 
-      mediaRecorder.start();
-      document.getElementById("recordBtn").disabled = true;
-      document.getElementById("stopBtn").disabled = false;
-    }};
+    function openVideoCall() {
+      const overlay = document.getElementById("videoOverlay");
+      overlay.style.display = "flex";
+      navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+        .then(stream => {
+          const video = document.getElementById("localVideo");
+          video.srcObject = stream;
+        })
+        .catch(err => alert("Gagal akses kamera: " + err));
+    }
 
-    document.getElementById("stopBtn").onclick = () => {{
-      mediaRecorder.stop();
-      document.getElementById("recordBtn").disabled = false;
-      document.getElementById("stopBtn").disabled = true;
-    }};
+    function closeVideoCall() {
+      const overlay = document.getElementById("videoOverlay");
+      overlay.style.display = "none";
+      const video = document.getElementById("localVideo");
+      if (video.srcObject) {
+        video.srcObject.getTracks().forEach(track => track.stop());
+        video.srcObject = null;
+      }
+    }
   </script>
-</head>
-<body>
-  <div class="chat-box">
-    <h2>Chat + Voice (Push to Talk)</h2>
-    <label>Nama Anda:</label>
-    <input type="text" id="username" placeholder="Tulis nama..." value="User" />
-
-    <div class="messages" id="chat"></div>
-
-    <input type="text" id="msgInput" placeholder="Tulis pesan..." style="width:65%;" />
-    <button id="sendBtn">Kirim</button>
-    <br><br>
-    <button id="recordBtn">🎙️ Rekam</button>
-    <button id="stopBtn" disabled>⏹️ Stop</button>
-  </div>
 </body>
 </html>
