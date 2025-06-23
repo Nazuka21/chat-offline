@@ -76,7 +76,7 @@
       const div = document.createElement("div");
 
       if (chat.audioBase64) {
-        const audio = new Audio("data:audio/ogg;base64," + chat.audioBase64);
+        const audio = new Audio("data:audio/mp3;base64," + chat.audioBase64);
         const playBtn = document.createElement("button");
         playBtn.textContent = "▶️ Putar Suara";
         playBtn.onclick = () => audio.play();
@@ -100,28 +100,32 @@
       const name = usernameInput.value.trim();
       if (!name) return alert("Masukkan nama dulu!");
 
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/ogg' });
-      audioChunks = [];
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(stream);
+        audioChunks = [];
 
-      mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
-      mediaRecorder.onstop = () => {
-        const blob = new Blob(audioChunks, { type: 'audio/ogg' });
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          const base64data = reader.result.split(',')[1];
-          push(chatRef, {
-            user: name,
-            time: new Date().toLocaleString(),
-            audioBase64: base64data
-          });
+        mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+        mediaRecorder.onstop = () => {
+          const blob = new Blob(audioChunks, { type: 'audio/mp3' });
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            const base64data = reader.result.split(',')[1];
+            push(chatRef, {
+              user: name,
+              time: new Date().toLocaleString(),
+              audioBase64: base64data
+            });
+          };
+          reader.readAsDataURL(blob);
         };
-        reader.readAsDataURL(blob);
-      };
 
-      mediaRecorder.start();
-      document.getElementById("recordBtn").disabled = true;
-      document.getElementById("stopBtn").disabled = false;
+        mediaRecorder.start();
+        document.getElementById("recordBtn").disabled = true;
+        document.getElementById("stopBtn").disabled = false;
+      } catch (err) {
+        alert("Tidak bisa akses mikrofon: " + err.message);
+      }
     };
 
     document.getElementById("stopBtn").onclick = () => {
@@ -137,19 +141,25 @@
 
     async function startVideoCall() {
       const name = usernameInput.value.trim();
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-      localVideo.srcObject = stream;
+      if (!name) return alert('Masukkan nama dulu!');
 
-      pc = new RTCPeerConnection();
-      stream.getTracks().forEach(track => pc.addTrack(track, stream));
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        localVideo.srcObject = stream;
 
-      pc.ontrack = e => {
-        remoteVideo.srcObject = e.streams[0];
-      };
+        pc = new RTCPeerConnection();
+        stream.getTracks().forEach(track => pc.addTrack(track, stream));
 
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-      set(callRef, { from: name, offer: offer });
+        pc.ontrack = e => {
+          remoteVideo.srcObject = e.streams[0];
+        };
+
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        set(callRef, { from: name, offer: offer });
+      } catch (err) {
+        alert("Gagal mengakses kamera/mikrofon: " + err.message);
+      }
     }
 
     onValue(callRef, async (snap) => {
