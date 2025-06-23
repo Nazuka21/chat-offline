@@ -1,9 +1,10 @@
+
 <!DOCTYPE html>
 <html lang="id">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Chat + Voice + Video Call</title>
+  <title>Chat + Push-to-Talk</title>
   <style>
     body { font-family: sans-serif; padding: 10px; background: #e3f2fd; }
     .chat-box { max-width: 600px; margin: auto; background: white; padding: 10px; border-radius: 10px; }
@@ -11,12 +12,101 @@
     .msg { margin: 5px 0; }
     .msg.you { text-align: right; color: green; }
     .msg.other { text-align: left; color: blue; }
-    video { width: 100%; max-height: 300px; border-radius: 10px; margin-top: 10px; }
   </style>
+  <script type="module">
+    import {{ initializeApp }} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import {{ getDatabase, ref, push, onChildAdded }} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+    import {{ getStorage, ref as sRef, uploadBytes, getDownloadURL }} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
+
+    const firebaseConfig = {{
+      apiKey: "AIzaSyBD8-9mZJkOWrJqwyaJEgndw4_EHJ8YKxM",
+      authDomain: "chatyou-89cec.firebaseapp.com",
+      databaseURL: "https://chatyou-89cec-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "chatyou-89cec",
+      storageBucket: "chatyou-89cec.appspot.com",
+      messagingSenderId: "581474208654",
+      appId: "1:581474208654:web:924db50831230ca1acf2df"
+    }};
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+    const chatRef = ref(db, "messages");
+    const storage = getStorage(app);
+
+    const usernameInput = document.getElementById("username");
+    const msgInput = document.getElementById("msgInput");
+    const chatBox = document.getElementById("chat");
+
+    document.getElementById("sendBtn").onclick = () => {{
+      const name = usernameInput.value.trim();
+      const msg = msgInput.value.trim();
+      if (!name || !msg) return;
+
+      push(chatRef, {{
+        user: name,
+        msg: msg,
+        time: new Date().toLocaleString()
+      }});
+      msgInput.value = "";
+    }};
+
+    // Tampilkan pesan masuk
+    onChildAdded(chatRef, (data) => {{
+      const chat = data.val();
+      const currentUser = usernameInput.value.trim();
+      const className = chat.user === currentUser ? "msg you" : "msg other";
+      const div = document.createElement("div");
+      if (chat.audioUrl) {{
+        div.className = className;
+        div.innerHTML = `<strong>{{chat.user}}</strong>: <audio controls src="{{chat.audioUrl}}"></audio><br><small>{{chat.time}}</small>`;
+      }} else {{
+        div.className = className;
+        div.innerHTML = `<strong>{{chat.user}}</strong>: {{chat.msg}}<br><small>{{chat.time}}</small>`;
+      }}
+      chatBox.appendChild(div);
+      chatBox.scrollTop = chatBox.scrollHeight;
+    }});
+
+    // Rekam suara
+    let mediaRecorder;
+    let audioChunks = [];
+
+    document.getElementById("recordBtn").onclick = async () => {{
+      const name = usernameInput.value.trim();
+      if (!name) return alert("Masukkan nama dulu!");
+
+      const stream = await navigator.mediaDevices.getUserMedia({{ audio: true }});
+      mediaRecorder = new MediaRecorder(stream);
+      audioChunks = [];
+
+      mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+      mediaRecorder.onstop = async () => {{
+        const blob = new Blob(audioChunks, {{ type: 'audio/webm' }});
+        const fileRef = sRef(storage, 'voices/' + Date.now() + '.webm');
+        await uploadBytes(fileRef, blob);
+        const url = await getDownloadURL(fileRef);
+        push(chatRef, {{
+          user: name,
+          time: new Date().toLocaleString(),
+          audioUrl: url
+        }});
+      }};
+
+      mediaRecorder.start();
+      document.getElementById("recordBtn").disabled = true;
+      document.getElementById("stopBtn").disabled = false;
+    }};
+
+    document.getElementById("stopBtn").onclick = () => {{
+      mediaRecorder.stop();
+      document.getElementById("recordBtn").disabled = false;
+      document.getElementById("stopBtn").disabled = true;
+    }};
+  </script>
 </head>
 <body>
   <div class="chat-box">
-    <h2>Chat + Voice + Video Call</h2>
+    <h2>Chat + Voice (Push to Talk)</h2>
     <label>Nama Anda:</label>
     <input type="text" id="username" placeholder="Tulis nama..." value="User" />
 
@@ -27,173 +117,6 @@
     <br><br>
     <button id="recordBtn">🎙️ Rekam</button>
     <button id="stopBtn" disabled>⏹️ Stop</button>
-    <br><br>
-    <button id="videoCallBtn">📞 Video Call</button>
-    <video id="localVideo" autoplay muted playsinline></video>
-    <video id="remoteVideo" autoplay playsinline></video>
   </div>
-
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-    import { getDatabase, ref, push, onChildAdded, set, onValue } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-
-    const firebaseConfig = {
-      apiKey: "AIzaSyBD8-9mZJkOWrJqwyaJEgndw4_EHJ8YKxM",
-      authDomain: "chatyou-89cec.firebaseapp.com",
-      databaseURL: "https://chatyou-89cec-default-rtdb.asia-southeast1.firebasedatabase.app",
-      projectId: "chatyou-89cec",
-      storageBucket: "chatyou-89cec.appspot.com",
-      messagingSenderId: "581474208654",
-      appId: "1:581474208654:web:924db50831230ca1acf2df"
-    };
-
-    const app = initializeApp(firebaseConfig);
-    const db = getDatabase(app);
-    const chatRef = ref(db, "messages");
-    const callRef = ref(db, "call");
-
-    const usernameInput = document.getElementById("username");
-    const msgInput = document.getElementById("msgInput");
-    const chatBox = document.getElementById("chat");
-
-    document.getElementById("sendBtn").onclick = () => {
-      const name = usernameInput.value.trim();
-      const msg = msgInput.value.trim();
-      if (!name || !msg) return;
-
-      push(chatRef, {
-        user: name,
-        msg: msg,
-        time: new Date().toLocaleString()
-      });
-      msgInput.value = "";
-    };
-
-    onChildAdded(chatRef, (data) => {
-      const chat = data.val();
-      const currentUser = usernameInput.value.trim();
-      const className = chat.user === currentUser ? "msg you" : "msg other";
-      const div = document.createElement("div");
-
-      if (chat.audioBase64) {
-        const audio = new Audio("data:audio/webm;base64," + chat.audioBase64);
-        const playBtn = document.createElement("button");
-        playBtn.textContent = "▶️ Putar Suara";
-        playBtn.onclick = () => audio.play();
-        div.className = className;
-        div.innerHTML = `<strong>${chat.user}</strong><br>`;
-        div.appendChild(playBtn);
-        div.innerHTML += `<br><small>${chat.time}</small>`;
-      } else {
-        div.className = className;
-        div.innerHTML = `<strong>${chat.user}</strong>: ${chat.msg}<br><small>${chat.time}</small>`;
-      }
-
-      chatBox.appendChild(div);
-      chatBox.scrollTop = chatBox.scrollHeight;
-    });
-
-    let mediaRecorder;
-    let audioChunks = [];
-
-    document.getElementById("recordBtn").onclick = async () => {
-      const name = usernameInput.value.trim();
-      if (!name) return alert("Masukkan nama dulu!");
-
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        mediaRecorder = new MediaRecorder(stream);
-        audioChunks = [];
-
-        mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
-        mediaRecorder.onstop = () => {
-          const blob = new Blob(audioChunks, { type: 'audio/webm' });
-          const reader = new FileReader();
-          reader.onloadend = () => {
-            const base64data = reader.result.split(',')[1];
-            push(chatRef, {
-              user: name,
-              time: new Date().toLocaleString(),
-              audioBase64: base64data
-            });
-          };
-          reader.readAsDataURL(blob);
-        };
-
-        mediaRecorder.start();
-        document.getElementById("recordBtn").disabled = true;
-        document.getElementById("stopBtn").disabled = false;
-      } catch (err) {
-        alert("Gagal akses mikrofon: " + err.message);
-      }
-    };
-
-    document.getElementById("stopBtn").onclick = () => {
-      mediaRecorder.stop();
-      document.getElementById("recordBtn").disabled = false;
-      document.getElementById("stopBtn").disabled = true;
-    };
-
-    const localVideo = document.getElementById("localVideo");
-    const remoteVideo = document.getElementById("remoteVideo");
-    let pc;
-
-    async function startVideoCall() {
-      const name = usernameInput.value.trim();
-      if (!name) return alert('Masukkan nama dulu!');
-
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        console.log("Akses kamera/mikrofon berhasil");
-        localVideo.srcObject = stream;
-
-        pc = new RTCPeerConnection();
-        stream.getTracks().forEach(track => pc.addTrack(track, stream));
-
-        pc.ontrack = e => {
-          remoteVideo.srcObject = e.streams[0];
-        };
-
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-        set(callRef, { from: name, offer: offer });
-      } catch (err) {
-        console.error("Gagal akses kamera/mikrofon:", err);
-        alert("Gagal mengakses kamera/mikrofon: " + err.message);
-      }
-    }
-
-    onValue(callRef, async (snap) => {
-      const data = snap.val();
-      if (!data || data.from === usernameInput.value.trim()) return;
-
-      try {
-        if (data.offer) {
-          const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-          localVideo.srcObject = stream;
-
-          pc = new RTCPeerConnection();
-          stream.getTracks().forEach(track => pc.addTrack(track, stream));
-
-          pc.ontrack = e => {
-            remoteVideo.srcObject = e.streams[0];
-          };
-
-          await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
-          const answer = await pc.createAnswer();
-          await pc.setLocalDescription(answer);
-          set(callRef, { from: usernameInput.value.trim(), answer: answer });
-        } else if (data.answer && pc) {
-          await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
-        }
-      } catch (err) {
-        console.error("Gagal mengatur WebRTC:", err);
-      }
-    });
-
-    document.getElementById("videoCallBtn").onclick = () => {
-      startVideoCall();
-    };
-  </script>
 </body>
 </html>
