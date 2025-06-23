@@ -29,8 +29,8 @@
     <button id="stopBtn" disabled>⏹️ Stop</button>
     <br><br>
     <button id="videoCallBtn">📞 Video Call</button>
-    <video id="localVideo" autoplay muted></video>
-    <video id="remoteVideo" autoplay></video>
+    <video id="localVideo" autoplay muted playsinline></video>
+    <video id="remoteVideo" autoplay playsinline></video>
   </div>
 
   <script type="module">
@@ -76,7 +76,7 @@
       const div = document.createElement("div");
 
       if (chat.audioBase64) {
-        const audio = new Audio("data:audio/mp3;base64," + chat.audioBase64);
+        const audio = new Audio("data:audio/webm;base64," + chat.audioBase64);
         const playBtn = document.createElement("button");
         playBtn.textContent = "▶️ Putar Suara";
         playBtn.onclick = () => audio.play();
@@ -107,7 +107,7 @@
 
         mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
         mediaRecorder.onstop = () => {
-          const blob = new Blob(audioChunks, { type: 'audio/mp3' });
+          const blob = new Blob(audioChunks, { type: 'audio/webm' });
           const reader = new FileReader();
           reader.onloadend = () => {
             const base64data = reader.result.split(',')[1];
@@ -124,7 +124,7 @@
         document.getElementById("recordBtn").disabled = true;
         document.getElementById("stopBtn").disabled = false;
       } catch (err) {
-        alert("Tidak bisa akses mikrofon: " + err.message);
+        alert("Gagal akses mikrofon: " + err.message);
       }
     };
 
@@ -134,7 +134,6 @@
       document.getElementById("stopBtn").disabled = true;
     };
 
-    // WebRTC Video Call
     const localVideo = document.getElementById("localVideo");
     const remoteVideo = document.getElementById("remoteVideo");
     let pc;
@@ -145,6 +144,7 @@
 
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        console.log("Akses kamera/mikrofon berhasil");
         localVideo.srcObject = stream;
 
         pc = new RTCPeerConnection();
@@ -158,6 +158,7 @@
         await pc.setLocalDescription(offer);
         set(callRef, { from: name, offer: offer });
       } catch (err) {
+        console.error("Gagal akses kamera/mikrofon:", err);
         alert("Gagal mengakses kamera/mikrofon: " + err.message);
       }
     }
@@ -166,23 +167,27 @@
       const data = snap.val();
       if (!data || data.from === usernameInput.value.trim()) return;
 
-      if (data.offer) {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        localVideo.srcObject = stream;
+      try {
+        if (data.offer) {
+          const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+          localVideo.srcObject = stream;
 
-        pc = new RTCPeerConnection();
-        stream.getTracks().forEach(track => pc.addTrack(track, stream));
+          pc = new RTCPeerConnection();
+          stream.getTracks().forEach(track => pc.addTrack(track, stream));
 
-        pc.ontrack = e => {
-          remoteVideo.srcObject = e.streams[0];
-        };
+          pc.ontrack = e => {
+            remoteVideo.srcObject = e.streams[0];
+          };
 
-        await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-        set(callRef, { from: usernameInput.value.trim(), answer: answer });
-      } else if (data.answer && pc) {
-        await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+          await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          set(callRef, { from: usernameInput.value.trim(), answer: answer });
+        } else if (data.answer && pc) {
+          await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+        }
+      } catch (err) {
+        console.error("Gagal mengatur WebRTC:", err);
       }
     });
 
