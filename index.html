@@ -3,32 +3,64 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Chat + Voice + Video Call</title>
+  <title>Video + Voice + Chat Room</title>
   <style>
-    body { margin: 0; font-family: sans-serif; background: #f0f0f0; }
-    header { background: #2196F3; color: white; padding: 10px; text-align: center; font-size: 20px; }
-    main { padding: 16px; max-width: 600px; margin: auto; }
-    video { width: 48%; border-radius: 8px; margin: 5px 1%; background: black; display: none; }
-    .messages { background: white; min-height: 40vh; padding: 10px; border-radius: 5px; overflow-y: auto; margin-bottom: 10px; }
-    .msg { margin: 5px 0; }
-    .control, .chat-control, .volume-control { text-align: center; margin-top: 10px; }
-    button, input[type="text"] { padding: 10px; margin: 5px; }
-    .volume-control { display: flex; justify-content: center; align-items: center; gap: 10px; }
+    body { margin: 0; font-family: sans-serif; background: #e5ddd5; }
+    header { background: #075E54; color: white; padding: 10px; text-align: center; font-size: 20px; position: relative; }
+    #logoutBtn { position: absolute; right: 10px; top: 10px; padding: 5px 10px; background: #f44336; color: white; border: none; cursor: pointer; border-radius: 5px; }
+    main { display: flex; flex-direction: column; align-items: center; padding: 16px; }
+    .video-area { display: none; flex-wrap: wrap; justify-content: center; gap: 10px; }
+    video { width: 100%; max-width: 240px; border-radius: 10px; background: black; }
+    .control, .chat-control { margin-top: 10px; text-align: center; }
+    button, input { padding: 10px; margin: 5px; }
+    .messages {
+      background: #fafafa;
+      width: 100%;
+      max-width: 95vw;
+      min-height: 50vh;
+      overflow-y: auto;
+      border: 1px solid #ccc;
+      padding: 10px;
+      border-radius: 5px;
+    }
+    .msg {
+      margin: 8px;
+      padding: 10px 14px;
+      border-radius: 10px;
+      max-width: 70%;
+      clear: both;
+      position: relative;
+      background: #fff;
+    }
+    .msg.self {
+      background-color: #dcf8c6;
+      margin-left: auto;
+      text-align: right;
+    }
+    .msg.other {
+      background-color: #fff;
+      margin-right: auto;
+      text-align: left;
+    }
+    audio { display: block; margin-top: 5px; width: 100%; }
   </style>
 </head>
 <body>
-<!-- Form Login -->
-<div id="overlay" style="position:fixed;top:0;left:0;width:100%;height:100%;background:#000000dd;color:white;z-index:9999;display:flex;flex-direction:column;justify-content:center;align-items:center;">
+<div id="overlay" style="position:fixed;top:0;left:0;width:100%;height:100%;background:#000000cc;color:white;z-index:9999;display:flex;flex-direction:column;justify-content:center;align-items:center;">
   <h2>Masukkan Nama dan Room</h2>
   <input type="text" id="inputName" placeholder="Nama Anda" />
   <input type="text" id="inputRoom" placeholder="Nama Room" />
   <button onclick="enterRoom()">Masuk</button>
 </div>
 
-<header id="roomTitle">Room  :    </header>
+<audio id="notifSound" src="https://www.soundjay.com/buttons/button-7.mp3" preload="auto"></audio>
+
+<header id="roomTitle">Room <button id="logoutBtn" onclick="logoutRoom()">Logout</button></header>
 <main>
-  <video id="remoteVideo" autoplay playsinline></video>
-  <video id="localVideo" autoplay muted playsinline></video>
+  <div class="video-area" id="videoArea">
+    <video id="remoteVideo" autoplay playsinline></video>
+    <video id="localVideo" autoplay muted playsinline></video>
+  </div>
 
   <div class="control">
     <button onclick="startCall()">🎥 Mulai Panggilan</button>
@@ -43,37 +75,25 @@
     <input type="text" id="chatInput" placeholder="Tulis pesan...">
     <button onclick="sendChat()">Kirim</button>
   </div>
-
-  <div class="volume-control">
-    🔊 Volume:
-    <input type="range" id="volumeRange" min="0" max="1" step="0.01" value="0.1">
-    <button onclick="toggleMute()" id="muteBtn">🔇 Mute</button>
-  </div>
 </main>
 
-<audio id="notifSound" src="https://www.soundjay.com/buttons/button-7.mp3" preload="auto"></audio>
-<audio id="bgMusic" src="https://www.soundjay.com/free-music/cautious-path-01.mp3" preload="auto" loop autoplay></audio>
-
-<!-- Firebase -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script>
-  const firebaseConfig = {
-    apiKey: "AIzaSyBD8-9mZJkOWrJqwyaJEgndw4_EHJ8YKxM",
-    authDomain: "chatyou-89cec.firebaseapp.com",
-    databaseURL: "https://chatyou-89cec-default-rtdb.asia-southeast1.firebasedatabase.app",
-    projectId: "chatyou-89cec",
-    storageBucket: "chatyou-89cec.appspot.com",
-    messagingSenderId: "581474208654",
-    appId: "1:581474208654:web:924db50831230ca1acf2df"
-  };
-  firebase.initializeApp(firebaseConfig);
-  const db = firebase.database();
-</script>
+const firebaseConfig = {
+  apiKey: "AIzaSyBD8-9mZJkOWrJqwyaJEgndw4_EHJ8YKxM",
+  authDomain: "chatyou-89cec.firebaseapp.com",
+  databaseURL: "https://chatyou-89cec-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "chatyou-89cec",
+  storageBucket: "chatyou-89cec.appspot.com",
+  messagingSenderId: "581474208654",
+  appId: "1:581474208654:web:924db50831230ca1acf2df"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
 
-<script>
-let room = localStorage.getItem("room");
 let username = localStorage.getItem("username");
+let room = localStorage.getItem("room");
 
 function enterRoom() {
   const name = document.getElementById("inputName").value.trim();
@@ -84,21 +104,27 @@ function enterRoom() {
   location.reload();
 }
 
-if (!room || !username) {
+if (!username || !room) {
   document.getElementById("overlay").style.display = "flex";
 } else {
   document.getElementById("overlay").style.display = "none";
   document.getElementById("roomTitle").innerText = "Room: #" + room;
 }
 
-// Chat + Audio
+function logoutRoom() {
+  localStorage.removeItem("username");
+  localStorage.removeItem("room");
+  location.reload();
+}
+
 const chatBox = document.getElementById("chatBox");
 const notifSound = document.getElementById("notifSound");
 
-firebase.database().ref("chat/" + room).on("child_added", snap => {
+db.ref("chat/" + room).on("child_added", snap => {
   const data = snap.val();
   const div = document.createElement("div");
   div.className = "msg";
+  div.classList.add(data.user === username ? "self" : "other");
   if (data.audio) {
     const audio = new Audio(data.audio);
     const playBtn = document.createElement("button");
@@ -107,7 +133,7 @@ firebase.database().ref("chat/" + room).on("child_added", snap => {
     div.innerHTML = `<strong>${data.user}</strong><br>`;
     div.appendChild(playBtn);
   } else {
-    div.innerHTML = `<strong>${data.user}</strong>: ${data.text}`;
+    div.innerHTML = `<strong>${data.user}</strong><br>${data.text}`;
   }
   chatBox.appendChild(div);
   chatBox.scrollTop = chatBox.scrollHeight;
@@ -118,7 +144,7 @@ function sendChat() {
   const input = document.getElementById("chatInput");
   const text = input.value.trim();
   if (!text) return;
-  firebase.database().ref("chat/" + room).push({ user: username, text });
+  db.ref("chat/" + room).push({ user: username, text });
   input.value = "";
 }
 
@@ -133,7 +159,7 @@ document.getElementById("recordBtn").onclick = async () => {
     const blob = new Blob(chunks, { type: 'audio/webm' });
     const reader = new FileReader();
     reader.onloadend = () => {
-      firebase.database().ref("chat/" + room).push({
+      db.ref("chat/" + room).push({
         user: username,
         audio: reader.result
       });
@@ -151,7 +177,6 @@ document.getElementById("stopBtn").onclick = () => {
   document.getElementById("stopBtn").disabled = true;
 };
 
-// Video Call sederhana
 let localStream, pc = new RTCPeerConnection();
 pc.ontrack = e => document.getElementById("remoteVideo").srcObject = e.streams[0];
 
@@ -159,29 +184,23 @@ async function startCall() {
   const local = document.getElementById("localVideo");
   const remote = document.getElementById("remoteVideo");
   local.style.display = remote.style.display = "inline-block";
-
   localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
   local.srcObject = localStream;
   localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-
-  const roomRef = firebase.database().ref("rooms/" + room);
+  const roomRef = db.ref("rooms/" + room);
   pc.onicecandidate = e => e.candidate && roomRef.child("candidates").push(JSON.stringify(e.candidate));
-
   const offer = await pc.createOffer();
   await pc.setLocalDescription(offer);
   await roomRef.child("offer").set(JSON.stringify(offer));
-
   roomRef.child("answer").on("value", snap => {
     if (snap.exists() && !pc.currentRemoteDescription) {
       pc.setRemoteDescription(new RTCSessionDescription(JSON.parse(snap.val())));
     }
   });
-
   roomRef.child("candidates").on("child_added", snap => {
     const candidate = JSON.parse(snap.val());
     pc.addIceCandidate(new RTCIceCandidate(candidate));
   });
-
   roomRef.child("offer").once("value", async snap => {
     if (snap.exists()) {
       const offer = JSON.parse(snap.val());
@@ -198,15 +217,6 @@ function endCall() {
   document.getElementById("remoteVideo").style.display = "none";
   pc.getSenders().forEach(s => pc.removeTrack(s));
   if (localStream) localStream.getTracks().forEach(track => track.stop());
-}
-
-// Volume
-const bgMusic = document.getElementById("bgMusic");
-bgMusic.volume = 0.1;
-document.getElementById("volumeRange").oninput = e => bgMusic.volume = parseFloat(e.target.value);
-function toggleMute() {
-  bgMusic.muted = !bgMusic.muted;
-  document.getElementById("muteBtn").textContent = bgMusic.muted ? "🔈 Unmute" : "🔇 Mute";
 }
 </script>
 </body>
