@@ -1,50 +1,60 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Chat + Voice + Video Call</title>
   <style>
-    body { font-family: sans-serif; background: #f2f2f2; margin: 0; }
-    header { background: #2196f3; color: white; padding: 10px; text-align: center; }
-    #messages { height: 300px; overflow-y: auto; background: #fff; margin: 10px; padding: 10px; border-radius: 10px; box-shadow: 0 0 5px #aaa; }
+    body { margin: 0; font-family: sans-serif; background: #f0f0f0; }
+    header { background: #2196F3; color: white; padding: 10px; text-align: center; font-size: 20px; }
+    main { padding: 16px; max-width: 600px; margin: auto; }
+    video { width: 48%; border-radius: 8px; margin: 5px 1%; background: black; display: none; }
+    .messages { background: white; min-height: 40vh; padding: 10px; border-radius: 5px; overflow-y: auto; margin-bottom: 10px; }
     .msg { margin: 5px 0; }
-    .you { text-align: right; color: green; }
-    .other { text-align: left; color: black; }
-    .bottom-bar { padding: 10px; background: #fff; position: sticky; bottom: 0; }
-    input[type="text"] { width: 60%; padding: 8px; }
-    button { padding: 8px 12px; margin: 4px; }
-    audio { width: 100%; }
-    #videoOverlay {
-      display: none;
-      position: fixed;
-      top: 0; left: 0; width: 100%; height: 100%;
-      background: rgba(0,0,0,0.8);
-      justify-content: center;
-      align-items: center;
-      flex-direction: column;
-      z-index: 9999;
-    }
-    video { width: 90vw; height: auto; max-height: 80vh; background: black; }
+    .control, .chat-control, .volume-control { text-align: center; margin-top: 10px; }
+    button, input[type="text"] { padding: 10px; margin: 5px; }
+    .volume-control { display: flex; justify-content: center; align-items: center; gap: 10px; }
   </style>
 </head>
 <body>
-<header><h2 id="roomTitle"></h2></header>
-<div id="messages"></div>
-<div class="bottom-bar">
-  <input id="textInput" placeholder="Tulis pesan...">
-  <button onclick="sendText()">Kirim</button>
-  <button onclick="openVideoCall()">Video Call</button><br>
-  <button id="recBtn">Rekam</button>
-  <button id="stopBtn" disabled>Stop</button>
+<!-- Form Login -->
+<div id="overlay" style="position:fixed;top:0;left:0;width:100%;height:100%;background:#000000dd;color:white;z-index:9999;display:flex;flex-direction:column;justify-content:center;align-items:center;">
+  <h2>Masukkan Nama dan Room</h2>
+  <input type="text" id="inputName" placeholder="Nama Anda" />
+  <input type="text" id="inputRoom" placeholder="Nama Room" />
+  <button onclick="enterRoom()">Masuk</button>
 </div>
 
-<div id="videoOverlay">
-  <video id="localVideo" autoplay muted></video>
-  <video id="remoteVideo" autoplay></video>
-  <button onclick="closeVideoCall()">Tutup</button>
-</div>
+<header id="roomTitle">Room  :    </header>
+<main>
+  <video id="remoteVideo" autoplay playsinline></video>
+  <video id="localVideo" autoplay muted playsinline></video>
 
+  <div class="control">
+    <button onclick="startCall()">🎥 Mulai Panggilan</button>
+    <button onclick="endCall()">❌ Akhiri</button>
+    <button id="recordBtn">🎤 Rekam</button>
+    <button id="stopBtn" disabled>⏹ Stop</button>
+  </div>
+
+  <div class="messages" id="chatBox"></div>
+
+  <div class="chat-control">
+    <input type="text" id="chatInput" placeholder="Tulis pesan...">
+    <button onclick="sendChat()">Kirim</button>
+  </div>
+
+  <div class="volume-control">
+    🔊 Volume:
+    <input type="range" id="volumeRange" min="0" max="1" step="0.01" value="0.1">
+    <button onclick="toggleMute()" id="muteBtn">🔇 Mute</button>
+  </div>
+</main>
+
+<audio id="notifSound" src="https://www.soundjay.com/buttons/button-7.mp3" preload="auto"></audio>
+<audio id="bgMusic" src="https://www.soundjay.com/free-music/cautious-path-01.mp3" preload="auto" loop autoplay></audio>
+
+<!-- Firebase -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script>
@@ -59,104 +69,145 @@
   };
   firebase.initializeApp(firebaseConfig);
   const db = firebase.database();
+</script>
 
-  let user = prompt("Nama Anda:") || "Anon";
-  let room = prompt("Nama Room:") || "umum";
-  document.getElementById("roomTitle").textContent = "Room: #" + room;
-  const msgRef = db.ref("chat/" + room);
+<script>
+let room = localStorage.getItem("room");
+let username = localStorage.getItem("username");
 
-  msgRef.on("child_added", snap => {
-    const data = snap.val();
-    const div = document.createElement("div");
-    div.className = "msg " + (data.user === user ? "you" : "other");
-    if (data.voiceUrl) {
-      div.innerHTML = `<b>${data.user}</b><br><audio controls src="${data.voiceUrl}"></audio><br><small>${data.time}</small>`;
-    } else {
-      div.innerHTML = `<b>${data.user}</b>: ${data.msg}<br><small>${data.time}</small>`;
+function enterRoom() {
+  const name = document.getElementById("inputName").value.trim();
+  const roomName = document.getElementById("inputRoom").value.trim();
+  if (!name || !roomName) return alert("Isi nama dan room!");
+  localStorage.setItem("username", name);
+  localStorage.setItem("room", roomName);
+  location.reload();
+}
+
+if (!room || !username) {
+  document.getElementById("overlay").style.display = "flex";
+} else {
+  document.getElementById("overlay").style.display = "none";
+  document.getElementById("roomTitle").innerText = "Room: #" + room;
+}
+
+// Chat + Audio
+const chatBox = document.getElementById("chatBox");
+const notifSound = document.getElementById("notifSound");
+
+firebase.database().ref("chat/" + room).on("child_added", snap => {
+  const data = snap.val();
+  const div = document.createElement("div");
+  div.className = "msg";
+  if (data.audio) {
+    const audio = new Audio(data.audio);
+    const playBtn = document.createElement("button");
+    playBtn.textContent = "▶️ Putar Suara";
+    playBtn.onclick = () => audio.play();
+    div.innerHTML = `<strong>${data.user}</strong><br>`;
+    div.appendChild(playBtn);
+  } else {
+    div.innerHTML = `<strong>${data.user}</strong>: ${data.text}`;
+  }
+  chatBox.appendChild(div);
+  chatBox.scrollTop = chatBox.scrollHeight;
+  if (data.user !== username) notifSound.play();
+});
+
+function sendChat() {
+  const input = document.getElementById("chatInput");
+  const text = input.value.trim();
+  if (!text) return;
+  firebase.database().ref("chat/" + room).push({ user: username, text });
+  input.value = "";
+}
+
+let mediaRecorder, chunks = [];
+
+document.getElementById("recordBtn").onclick = async () => {
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  mediaRecorder = new MediaRecorder(stream);
+  chunks = [];
+  mediaRecorder.ondataavailable = e => chunks.push(e.data);
+  mediaRecorder.onstop = () => {
+    const blob = new Blob(chunks, { type: 'audio/webm' });
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      firebase.database().ref("chat/" + room).push({
+        user: username,
+        audio: reader.result
+      });
+    };
+    reader.readAsDataURL(blob);
+  };
+  mediaRecorder.start();
+  document.getElementById("recordBtn").disabled = true;
+  document.getElementById("stopBtn").disabled = false;
+};
+
+document.getElementById("stopBtn").onclick = () => {
+  mediaRecorder.stop();
+  document.getElementById("recordBtn").disabled = false;
+  document.getElementById("stopBtn").disabled = true;
+};
+
+// Video Call sederhana
+let localStream, pc = new RTCPeerConnection();
+pc.ontrack = e => document.getElementById("remoteVideo").srcObject = e.streams[0];
+
+async function startCall() {
+  const local = document.getElementById("localVideo");
+  const remote = document.getElementById("remoteVideo");
+  local.style.display = remote.style.display = "inline-block";
+
+  localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+  local.srcObject = localStream;
+  localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+
+  const roomRef = firebase.database().ref("rooms/" + room);
+  pc.onicecandidate = e => e.candidate && roomRef.child("candidates").push(JSON.stringify(e.candidate));
+
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+  await roomRef.child("offer").set(JSON.stringify(offer));
+
+  roomRef.child("answer").on("value", snap => {
+    if (snap.exists() && !pc.currentRemoteDescription) {
+      pc.setRemoteDescription(new RTCSessionDescription(JSON.parse(snap.val())));
     }
-    document.getElementById("messages").appendChild(div);
-    document.getElementById("messages").scrollTop = messages.scrollHeight;
   });
 
-  function sendText() {
-    const text = document.getElementById("textInput").value.trim();
-    if (!text) return;
-    msgRef.push({ user, msg: text, time: new Date().toLocaleTimeString() });
-    document.getElementById("textInput").value = "";
-  }
+  roomRef.child("candidates").on("child_added", snap => {
+    const candidate = JSON.parse(snap.val());
+    pc.addIceCandidate(new RTCIceCandidate(candidate));
+  });
 
-  // Voice Record
-  let recorder, chunks = [];
-  document.getElementById("recBtn").onclick = async () => {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    recorder = new MediaRecorder(stream);
-    chunks = [];
-    recorder.ondataavailable = e => chunks.push(e.data);
-    recorder.onstop = () => {
-      const blob = new Blob(chunks, { type: 'audio/webm' });
-      const url = URL.createObjectURL(blob);
-      msgRef.push({ user, voiceUrl: url, time: new Date().toLocaleTimeString() });
-    };
-    recorder.start();
-    recBtn.disabled = true;
-    stopBtn.disabled = false;
-  };
-  document.getElementById("stopBtn").onclick = () => {
-    recorder.stop();
-    recBtn.disabled = false;
-    stopBtn.disabled = true;
-  };
+  roomRef.child("offer").once("value", async snap => {
+    if (snap.exists()) {
+      const offer = JSON.parse(snap.val());
+      await pc.setRemoteDescription(new RTCSessionDescription(offer));
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      await roomRef.child("answer").set(JSON.stringify(answer));
+    }
+  });
+}
 
-  // Video Call P2P (sederhana)
-  let pc, localStream;
-  const servers = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
-  function openVideoCall() {
-    document.getElementById("videoOverlay").style.display = "flex";
-    navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then(stream => {
-      localStream = stream;
-      document.getElementById("localVideo").srcObject = stream;
-      startCall();
-    });
-  }
-  function startCall() {
-    pc = new RTCPeerConnection(servers);
-    localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
-    pc.ontrack = e => {
-      document.getElementById("remoteVideo").srcObject = e.streams[0];
-    };
-    pc.onicecandidate = e => {
-      if (e.candidate) db.ref(`call/${room}/${user}/ice`).push(e.candidate.toJSON());
-    };
-    db.ref(`call/${room}`).once('value').then(async snap => {
-      if (!snap.hasChild('offer')) {
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-        db.ref(`call/${room}/offer`).set({ sdp: offer.sdp, type: offer.type });
-      } else {
-        db.ref(`call/${room}/offer`).on('value', async s => {
-          const offer = s.val();
-          await pc.setRemoteDescription(new RTCSessionDescription(offer));
-          const answer = await pc.createAnswer();
-          await pc.setLocalDescription(answer);
-          db.ref(`call/${room}/answer`).set({ sdp: answer.sdp, type: answer.type });
-        });
-      }
-    });
-    db.ref(`call/${room}/answer`).on('value', async s => {
-      const answer = s.val();
-      if (answer) await pc.setRemoteDescription(new RTCSessionDescription(answer));
-    });
-    db.ref(`call/${room}`).on('child_added', s => {
-      if (s.key === 'ice') {
-        Object.values(s.val()).forEach(c => pc.addIceCandidate(new RTCIceCandidate(c)));
-      }
-    });
-  }
-  function closeVideoCall() {
-    document.getElementById("videoOverlay").style.display = "none";
-    if (localStream) localStream.getTracks().forEach(track => track.stop());
-    if (pc) pc.close();
-  }
+function endCall() {
+  document.getElementById("localVideo").style.display = "none";
+  document.getElementById("remoteVideo").style.display = "none";
+  pc.getSenders().forEach(s => pc.removeTrack(s));
+  if (localStream) localStream.getTracks().forEach(track => track.stop());
+}
+
+// Volume
+const bgMusic = document.getElementById("bgMusic");
+bgMusic.volume = 0.1;
+document.getElementById("volumeRange").oninput = e => bgMusic.volume = parseFloat(e.target.value);
+function toggleMute() {
+  bgMusic.muted = !bgMusic.muted;
+  document.getElementById("muteBtn").textContent = bgMusic.muted ? "🔈 Unmute" : "🔇 Mute";
+}
 </script>
 </body>
 </html>
